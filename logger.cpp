@@ -92,7 +92,7 @@ void logInit() {
     // CSV header
     logPrintln("Time_ms,LoopTime,Inclination,Pitch,Yaw,Roll,AccX,AccY,AccZ,"
             "RawAlt,FiltAlt,VertVel,"
-            "AirbrakeDeg,PredApogee,"
+            "AirbrakeTargetDeg,MotorAngle,PredApogee,"
             "Phase,Inhibited");
 
     if (sd_working) logFile.flush();
@@ -104,12 +104,11 @@ void logInit() {
 void logData() {
     char buf[192];
     snprintf(buf, sizeof(buf),
-        "%lu,%lu,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%d",
+        "%lu,%lu,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%d",
         millis(), loop_time, current_inclination,
-        pitch, yaw, roll,
-        accx, accy, accz,
-        raw_altitude, filtered_altitude, vertical_velocity,
-        airbrake_theta, predicted_apogee,
+        accz,
+        filtered_altitude, vertical_velocity,
+        airbrake_theta, filteredAngle, predicted_apogee,
         phase_name(),
         airbrakes_inhibited
     );

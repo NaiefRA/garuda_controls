@@ -62,7 +62,7 @@ static void check_coast_to_airbrakes() {
     float time_since_burnout = millis() - burnout_time_ms;
 
     if (time_since_burnout < COAST_DELAY_MS)   return;  // still waiting
-    if (filtered_altitude < AIRBRAKES_MIN_ALT) return;  // too low
+    // if (filtered_altitude < AIRBRAKES_MIN_ALT) return;  // too low
     if (airbrakes_inhibited)                   return; 
 
     flight_phase = AIRBRAKES_ACTIVE;
@@ -71,7 +71,7 @@ static void check_coast_to_airbrakes() {
 
 static void check_apogee() {
     if (vertical_velocity < APOGEE_VEL_THRESHOLD) {
-        flight_phase = APOGEE;
+        // flight_phase = APOGEE;
         Serial.println("[FSM] APOGEE REACHED");
     }
 }

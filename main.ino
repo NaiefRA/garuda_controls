@@ -53,7 +53,30 @@ void setup() {
 
 void loop() {
     updateMotor();
-
+    if (Serial.available() > 0) {
+        char c = Serial.read();
+        if (c == 'b') {
+            Serial.println("\n[TEST] Extending airbrakes to 45 degrees...");
+            setTargetDeg(45);
+            
+            uint32_t test_timer = millis();
+            while (millis() - test_timer < 2000) { // Hold for 2 seconds
+                updateMotor();
+                delay(2);
+            }
+            
+            Serial.println("[TEST] Executing retractAirbrakes()...");
+            retractAirbrakes();
+            
+            test_timer = millis();
+            while (millis() - test_timer < 2000) { // Allow 2 seconds to retract
+                updateMotor();
+                delay(2);
+            }
+            Serial.println("[TEST] Sequence complete.\n");
+            
+        }
+    }
     if (millis() - last_loop_time < 15) return;
     last_loop_time = millis();
 
@@ -96,15 +119,24 @@ void loop() {
 
     // Airbrakes
     uint32_t t_airbrakes = micros();
-    // if (airbrakes_allowed()) {
-    //     float extension = runSMC(filtered_altitude, vertical_velocity, current_inclination);
-    //     airbrake_theta = extension * 60.0f;
-    //     setTargetDeg((int)airbrake_theta);
-    // } else {
-    //     retractAirbrakes();
-    //     airbrake_theta = 0;
-    // }
-    retractAirbrakes();
+    if (airbrakes_allowed()) {
+        float extension = runSMC(filtered_altitude, vertical_velocity, current_inclination);
+        airbrake_theta = extension * 60.0f;
+        // setTargetDeg((int)airbrake_theta);
+        setTargetDeg(45);
+
+        Serial.println("EXTENSION");
+    } else if (phase_name() == "IDLE") {
+        Serial.println("IDLE");
+    } else if (phase_name() == "AIRBRAKES_ACTIVE") {
+        Serial.println("RETRACT");
+        retractAirbrakes();
+        airbrake_theta = 0;
+    } else {
+        Serial.println("ELSE");
+    }
+    
+    // retractAirbrakes();
     t_airbrakes = micros() - t_airbrakes;
 
     // Logging
