@@ -41,7 +41,7 @@ void setup() {
     setupBNO();
     setupDPS310();
     setupMotor();
-    setupSD();
+    // setupSD();
     logInit();
 
     filter.init();
@@ -142,7 +142,7 @@ void loop() {
     // Logging
     uint32_t t_log = micros();
     logData();
-    flushLog();
+    // flushLog();
     t_log = micros() - t_log;
 
     loop_time = micros() - t_total_start;
