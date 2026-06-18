@@ -10,6 +10,7 @@ struct RocketEKF {
   float P[8][8];
   float Q[8][8];
   float R_alt;
+  float last_innovation;  // baro innovation (z_measured - z_predicted), for logging
 
   void init();
 

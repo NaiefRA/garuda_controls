@@ -92,10 +92,5 @@ void setTargetDeg(int deg) {
 void retractAirbrakes() {
     Serial.print("[Motor] RETRACTING AIRBRAKES. Current filtered angle: ");
     Serial.println(filteredAngle);
-    Serial.print("[Motor] RETRACTING AIRBRAKES. Current filtered angle: ");
-    Serial.println(filteredAngle);
-    Serial.print("[Motor] RETRACTING AIRBRAKES. Current filtered angle: ");
-    Serial.println(filteredAngle);
     setTargetDeg(0);
-    
 }

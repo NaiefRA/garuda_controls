@@ -11,6 +11,8 @@ extern Adafruit_DPS310 dps;
 extern float accx, accy, accz;
 extern float gyrox, gyroy, gyroz;
 extern float raw_altitude;
+extern float raw_pressure;     // hPa, from DPS310
+extern float raw_temperature;  // °C, from DPS310
 extern float P0;
 
 // =========================================================================

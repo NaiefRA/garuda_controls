@@ -23,10 +23,12 @@ void RocketEKF::init() {
         Q[i][j] = 0.0f;
       }
     }
-    Q[1][1] = 0.05f; Q[2][2] = 0.05f; Q[3][3] = 0.05f; 
+    Q[1][1] = 0.05f; Q[2][2] = 0.05f; Q[3][3] = 0.05f;
+    Q[0][0] = 0.01f;  // small altitude process noise — prevents over-confident altitude estimate
     Q[4][4] = 0.001f; Q[5][5] = 0.001f; Q[6][6] = 0.001f; Q[7][7] = 0.001f;
 
-    R_alt = 0.5f; 
+    R_alt = 0.5f;
+    last_innovation = 0.0f;
 }
 
 void RocketEKF::predict(float ax, float ay, float az, float gyro_x, float gyro_y, float gyro_z, float dt) {
@@ -107,6 +109,7 @@ void RocketEKF::updateAltimeter(float measured_altitude) {
     float z_obs = -measured_altitude;
     float z_pred = x[0]; 
     float innovation = z_obs - z_pred;
+    last_innovation = innovation;  // store for logging
     float S = P[0][0] + R_alt;
 
     float K[8];
@@ -124,26 +127,38 @@ void RocketEKF::updateAltimeter(float measured_altitude) {
       x[4] /= q_norm; x[5] /= q_norm; x[6] /= q_norm; x[7] /= q_norm;
     }
 
-    float KH[8][8] = {0};
-    for(int i = 0; i < 8; i++) {
-      KH[i][0] = K[i]; 
-    }
+    // Joseph form: P = (I - K*H)*P*(I - K*H)' + K*R*K'
+    // Numerically stable — keeps P positive-definite under float rounding errors.
+    // H is 1x8, only H[0][0] = 1. So (I - K*H)[i][j] = delta(i,j) - K[i]*H[0][j]
+    // where H[0][0]=1, all other H[0][j]=0, so (I-KH)[i][j] = delta(i,j) - K[i]*(j==0 ? 1 : 0)
 
-    float new_P[8][8] = {0};
-    for(int i = 0; i < 8; i++) {
-      for(int j = 0; j < 8; j++) {
-        float sum = 0.0f;
-        for(int k = 0; k < 8; k++) {
-          sum += KH[i][k] * P[k][j];
+    // Compute IKH = (I - K*H)  [8x8]
+    float IKH[8][8];
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++) {
+            IKH[i][j] = (i == j ? 1.0f : 0.0f) - K[i] * (j == 0 ? 1.0f : 0.0f);
         }
-        new_P[i][j] = P[i][j] - sum;
-      }
     }
 
-    for(int i = 0; i < 8; i++) {
-      for(int j = 0; j < 8; j++) {
-        P[i][j] = new_P[i][j];
-      }
+    // Compute IKH * P  [8x8]
+    float IKH_P[8][8] = {0};
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++) {
+            for (int k = 0; k < 8; k++) {
+                IKH_P[i][j] += IKH[i][k] * P[k][j];
+            }
+        }
+    }
+
+    // Compute (IKH * P) * IKH'  [8x8] and add K*R*K'
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++) {
+            float sum = 0.0f;
+            for (int k = 0; k < 8; k++) {
+                sum += IKH_P[i][k] * IKH[j][k];  // IKH[j][k] = IKH'[k][j]
+            }
+            P[i][j] = sum + K[i] * R_alt * K[j];  // + K*R*K' term
+        }
     }
 }
 

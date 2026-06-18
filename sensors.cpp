@@ -1,31 +1,56 @@
 #include "sensors.h"
+#include "logger.h"
 
 Adafruit_DPS310 dps;
 
 float accx, accy, accz;
 float gyrox, gyroy, gyroz;
 float raw_altitude;
+float raw_pressure    = 1013.25f;
+float raw_temperature = 15.0f;
 float P0;
 
 /////////////////////////
 // SETUP FUNCTIONS
 /////////////////////////
 
-void setupBNO(){
-  Serial.println("[BNO] Initializing...");
-  Wire.beginTransmission(BNO_ADDR);
-  Wire.write(0x3E); 
-  Wire.write(0x00); 
-  Wire.endTransmission();
-  delay(10);
-  
-  Wire.beginTransmission(BNO_ADDR);
-  Wire.write(0x3D); 
-  Wire.write(0x08); 
-  Wire.endTransmission();
-  delay(10);
-  Serial.println("[BNO] OK");
-};
+void setupBNO() {
+    Serial.println("[BNO] Initializing...");
+
+    // Wake from suspend (register 0x3E = PWR_MODE, value 0x00 = normal)
+    Wire.beginTransmission(BNO_ADDR);
+    Wire.write(0x3E);
+    Wire.write(0x00);
+    uint8_t err = Wire.endTransmission();
+    if (err != 0) {
+        Serial.print("[BNO] FAILED on wake - I2C error: ");
+        Serial.println(err);
+        // Rapid blink to signal sensor failure — halt here so the
+        // problem is obvious before flight.
+        while (true) {
+            digitalWrite(LED_PIN, !digitalRead(LED_PIN));
+            delay(100);
+        }
+    }
+    delay(10);
+
+    // Set to NDOF fusion mode (register 0x3D = OPR_MODE, value 0x08 = IMUPLUS)
+    Wire.beginTransmission(BNO_ADDR);
+    Wire.write(0x3D);
+    Wire.write(0x08);
+    err = Wire.endTransmission();
+    if (err != 0) {
+        Serial.print("[BNO] FAILED on mode set - I2C error: ");
+        Serial.println(err);
+        while (true) {
+            digitalWrite(LED_PIN, !digitalRead(LED_PIN));
+            delay(100);
+        }
+    }
+    delay(10);
+
+    Serial.println("[BNO] OK");
+}
 
 void setupDPS310() {
     Serial.println("[DPS310] Initializing...");
@@ -64,38 +89,42 @@ void setupDPS310() {
 // DATA
 /////////////////////////////
 
-void getAccel(){
-  Wire.beginTransmission(BNO_ADDR);
-  Wire.write(0x08); 
-  Wire.endTransmission();
-  Wire.requestFrom(BNO_ADDR, 6);
-  int16_t AccelX = Wire.read() | (Wire.read() << 8);
-  int16_t AccelY = Wire.read() | (Wire.read() << 8);
-  int16_t AccelZ = Wire.read() | (Wire.read() << 8);
-  
-  accx = (float)AccelX / 100.0f;
-  accy = (float)AccelY / 100.0f;
-  accz = (float)AccelZ / 100.0f;
+void getAccel() {
+    Wire.beginTransmission(BNO_ADDR);
+    Wire.write(0x08);
+    Wire.endTransmission();
+    Wire.requestFrom(BNO_ADDR, 6);
+    if (Wire.available() < 6) return;  // keep previous values if read fails
+    int16_t AccelX = Wire.read() | (Wire.read() << 8);
+    int16_t AccelY = Wire.read() | (Wire.read() << 8);
+    int16_t AccelZ = Wire.read() | (Wire.read() << 8);
+    
+    accx = (float)AccelX / 100.0f;
+    accy = (float)AccelY / 100.0f;
+    accz = (float)AccelZ / 100.0f;
 };
 
-void getGyro(){
-  Wire.beginTransmission(BNO_ADDR);
-  Wire.write(0x14); 
-  Wire.endTransmission();
-  Wire.requestFrom(BNO_ADDR, 6);
-  int16_t GyroX = Wire.read() | (Wire.read() << 8);
-  int16_t GyroY = Wire.read() | (Wire.read() << 8);
-  int16_t GyroZ = Wire.read() | (Wire.read() << 8);
-  
-  gyrox = ((float)GyroX / 16.0f) * 0.01745329f;
-  gyroy = ((float)GyroY / 16.0f) * 0.01745329f;
-  gyroz = ((float)GyroZ / 16.0f) * 0.01745329f;
+void getGyro() {
+    Wire.beginTransmission(BNO_ADDR);
+    Wire.write(0x14);
+    Wire.endTransmission();
+    Wire.requestFrom(BNO_ADDR, 6);
+    if (Wire.available() < 6) return;  // keep previous values if read fails
+    int16_t GyroX = Wire.read() | (Wire.read() << 8);
+    int16_t GyroY = Wire.read() | (Wire.read() << 8);
+    int16_t GyroZ = Wire.read() | (Wire.read() << 8);
+    
+    gyrox = ((float)GyroX / 16.0f) * 0.01745329f;
+    gyroy = ((float)GyroY / 16.0f) * 0.01745329f;
+    gyroz = ((float)GyroZ / 16.0f) * 0.01745329f;
 };
 
 bool getBaroAltitude() {
     if (!dps.pressureAvailable() || !dps.temperatureAvailable()) return false;
     sensors_event_t temp_event, pressure_event;
     dps.getEvents(&temp_event, &pressure_event);
-    raw_altitude = 44330.0f * (1.0f - powf(pressure_event.pressure / P0, 0.1902949f));
+    raw_pressure    = pressure_event.pressure;       // hPa
+    raw_temperature = temp_event.temperature;         // °C
+    raw_altitude    = 44330.0f * (1.0f - powf(raw_pressure / P0, 0.1902949f));
     return true;
 }

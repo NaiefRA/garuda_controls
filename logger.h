@@ -18,6 +18,7 @@ void setupLED();
 void logData();        // logs all flight data every loop
 void logInit();        // called once after all setup, logs config constants
 void flushLog();       // call periodically, not every loop
+void updateLED();      // non-blocking LED state indicator
 
 // Print + Log helpers (write to both Serial and SD)
 void logPrintln(const char* msg);

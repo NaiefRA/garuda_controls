@@ -20,7 +20,7 @@ float runSMC(float h, float vMag, float inclDeg) {
     if (lastSMCTime == 0) {
         lastSMCTime = currentTime;
         lastSMCError = error;
-        return 0.0f;
+        return 0.0f;-=
     }
 
     float dt = (currentTime - lastSMCTime) / 1000000.0f; // micros to seconds
