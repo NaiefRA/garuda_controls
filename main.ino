@@ -50,7 +50,7 @@ static bool      flap_alt_done        = false;  // true once altitude sequence f
 
 const int      FLAP_ANGLE_DEG = 45;    // degrees of extension per flap
 const uint32_t FLAP_HOLD_MS   = 400;   // ms to hold each extend/retract
-const float    FLAP_ALT_M     = 2850.0f; // m AGL — second trigger on descent
+const float    FLAP_ALT_M     = 2750.0f; // m AGL — second trigger on descent
 
 static void startFlapSequence(const char* reason) {
     flap_state     = FLAP_ACTIVE;
