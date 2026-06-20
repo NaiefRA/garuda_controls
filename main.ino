@@ -31,6 +31,76 @@ uint32_t t_airbrakes_us = 0;
 uint32_t last_time = 0;
 unsigned long last_loop_time = 0;
 
+// ─────────────────────────────────────────────
+//  FLAP TEST STATE MACHINE
+//
+//  Two independent triggers, each runs 3 flaps (extend/retract × 3):
+//    1. Apogee detection (flight_phase transitions to APOGEE)
+//    2. Altitude drops below FLAP_ALT_M on descent
+//
+//  Motor is NOT commanded at any other point during flight.
+// ─────────────────────────────────────────────
+enum FlapState { FLAP_IDLE, FLAP_ACTIVE, FLAP_DONE };
+
+static FlapState flap_state           = FLAP_IDLE;
+static int       flap_step            = 0;      // 0-5: 3 extend + 3 retract steps
+static uint32_t  flap_step_time       = 0;
+static bool      flap_apogee_done     = false;  // true once apogee sequence fired
+static bool      flap_alt_done        = false;  // true once altitude sequence fired
+
+const int      FLAP_ANGLE_DEG = 45;    // degrees of extension per flap
+const uint32_t FLAP_HOLD_MS   = 400;   // ms to hold each extend/retract
+const float    FLAP_ALT_M     = 2850.0f; // m AGL — second trigger on descent
+
+static void startFlapSequence(const char* reason) {
+    flap_state     = FLAP_ACTIVE;
+    flap_step      = 0;
+    flap_step_time = millis();
+    setTargetDeg(FLAP_ANGLE_DEG);  // kick off first extend immediately
+    Serial.print("[FLAP] Starting — ");
+    Serial.println(reason);
+}
+
+static void updateFlapTest() {
+    // ── Trigger 1: apogee ──
+    if (!flap_apogee_done && flight_phase == APOGEE &&
+        filtered_altitude > 2500.0f) {
+        flap_apogee_done = true;
+        startFlapSequence("apogee");
+        return;  // don't check alt trigger same loop
+    }
+
+    // ── Trigger 2: altitude below FLAP_ALT_M on descent ──
+    // Only fires once apogee sequence is fully done (avoids overlap)
+    if (!flap_alt_done && flap_apogee_done &&
+        flight_phase == APOGEE &&
+        filtered_altitude < FLAP_ALT_M && filtered_altitude > 0.0f) {
+        flap_alt_done = true;
+        if (flap_state == FLAP_DONE || flap_state == FLAP_IDLE) {
+            startFlapSequence("2850m altitude");
+        }
+    }
+
+    // ── Step through the flap sequence ──
+    if (flap_state == FLAP_ACTIVE) {
+        if (millis() - flap_step_time >= FLAP_HOLD_MS) {
+            flap_step++;
+            flap_step_time = millis();
+
+            if (flap_step >= 6) {
+                // 3 full flaps done — retract and finish
+                setTargetDeg(0);
+                flap_state = FLAP_DONE;
+                Serial.println("[FLAP] Sequence complete — retracted");
+            } else {
+                // even steps → extend, odd steps → retract
+                setTargetDeg((flap_step % 2 == 0) ? FLAP_ANGLE_DEG : 0);
+            }
+        }
+    }
+}
+
+
 void setup() {
     setupLED();
     Wire.begin();
@@ -78,7 +148,7 @@ void loop() {
                 delay(2);
             }
 
-            Serial.println("[TEST] Executing retractAirbrakes()...");
+            Serial.println("[TEST] Retracting...");
             retractAirbrakes();
 
             test_timer = millis();
@@ -130,30 +200,25 @@ void loop() {
     update_flight_state();
     t_fsm_us = micros() - t0;
 
-    // ── Experiments (phantom detectors) ──
+    // ── Experiments (phantom detectors — always run) ──
     t0 = micros();
     update_experiments();
     t_exp_us = micros() - t0;
 
-    // ── Airbrakes ──
+    // ── SMC: shadow mode — compute but do NOT command the motor ──
+    // airbrake_theta logs what SMC would have commanded.
+    // Motor is never driven during the boost/coast/airbrakes window.
     t0 = micros();
-    {
-        static bool retract_sent = false;
-
-        if (airbrakes_allowed()) {
-            retract_sent = false;  // reset flag — ready to retract again if needed
-            float extension = runSMC(filtered_altitude, vertical_velocity, current_inclination);
-            airbrake_theta = extension * 60.0f;
-            setTargetDeg((int)airbrake_theta);
-        } else if ((flight_phase == AIRBRAKES_ACTIVE && airbrakes_inhibited) ||
-                   (flight_phase == APOGEE || flight_phase == DESCENDED)) {
-            if (!retract_sent) {
-                retractAirbrakes();
-                airbrake_theta = 0;
-                retract_sent = true;
-            }
-        }
+    if (flight_phase == AIRBRAKES_ACTIVE) {
+        float extension = runSMC(filtered_altitude, vertical_velocity, current_inclination);
+        airbrake_theta = extension * 60.0f;  // degrees — logged for post-flight analysis
+        // setTargetDeg intentionally NOT called here
+    } else {
+        airbrake_theta = 0.0f;
     }
+
+    // ── Flap test: only actual motor actuation ──
+    updateFlapTest();
     t_airbrakes_us = micros() - t0;
 
     // ── Logging ──
